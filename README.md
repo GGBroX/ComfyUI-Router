@@ -1,4 +1,4 @@
-# GGBro Router (Any) — Router + Global Set/Get (no suffix) for ComfyUI
+# GGBro Router (Any) — Router + Global Set/Get for ComfyUI
 
 A small ComfyUI node suite designed to:
 - **route** one input into multiple branches (hard gating with blockers),
