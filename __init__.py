@@ -22,7 +22,7 @@ def _is_blocker(x) -> bool:
         return False
 
 def _empty_image():
-    # fallback safe per non far esplodere PreviewImage se manca valore
+    # fallback safe per PreviewImage se non hai messo default
     try:
         import torch
         return torch.zeros((1, 64, 64, 3), dtype=torch.float32)
@@ -40,11 +40,9 @@ def _get_execution_blocker():
         return ExecutionBlocker
     except Exception:
         pass
-
     class ExecutionBlocker:
         def __init__(self, message=None):
             self.message = message
-
     return ExecutionBlocker
 
 ExecutionBlocker = _get_execution_blocker()
@@ -60,8 +58,10 @@ class GGBroRouterAny:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "in": (ANY,),
                 "select": ("INT", {"default": 1, "min": 1, "max": cls.MAX_OUT, "step": 1}),
+            },
+            "optional": {
+                "in": (ANY,),
             }
         }
 
@@ -71,14 +71,14 @@ class GGBroRouterAny:
     CATEGORY = "GGBro Router"
 
     def route(self, **kwargs):
-        inp = kwargs.get("in", None)
+        inp = kwargs.get("in", None)  # <- ora può non esserci
         sel = int(kwargs.get("select", 1))
         sel = max(1, min(self.MAX_OUT, sel))
 
-        # HARD: gli altri rami sono blocker (così non vengono eseguiti)
         off = ExecutionBlocker(None)
         outs = [off] * self.MAX_OUT
-        outs[sel - 1] = inp
+        outs[sel - 1] = inp  # se inp è None, va bene (ma non usarlo per preprocessors)
+
         return (sel,) + tuple(outs)
 
 
