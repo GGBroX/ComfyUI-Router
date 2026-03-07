@@ -1,4 +1,5 @@
 import threading
+import time
 
 
 # ===== Any type =====
@@ -16,6 +17,7 @@ ANY = AnyType("*")
 # ===== Global store =====
 _STORE = {}
 _LOCK = threading.RLock()
+_SYNC_COUNTER = 0
 
 
 # ===== Helpers =====
@@ -121,6 +123,10 @@ class GGBroRouterOutAny:
         outs[sel - 1] = inp
         return (sel,) + tuple(outs)
 
+    @classmethod
+    def IS_CHANGED(cls, select=1, **kwargs):
+        return time.time()
+
 
 # =========================
 # 3) GGBro Router IN (Any) 8->1
@@ -160,6 +166,9 @@ class GGBroRouterInAny:
 
         return (sel, value)
 
+    @classmethod
+    def IS_CHANGED(cls, select=1, **kwargs):
+        return time.time()
 
 
 # =========================
@@ -188,15 +197,28 @@ class GGBroSetAny:
     CATEGORY = "GGBro Router"
 
     def set(self, key, value, respond_channel=1, selected_channel=1):
+        global _SYNC_COUNTER
+
         if int(selected_channel) != int(respond_channel):
-            return (value, 1)
+            with _LOCK:
+                current_sync = _SYNC_COUNTER
+            return (value, current_sync)
 
         if value is None or _is_blocker(value):
-            return (value, 1)
+            with _LOCK:
+                current_sync = _SYNC_COUNTER
+            return (value, current_sync)
 
         with _LOCK:
             _STORE[str(key)] = value
-        return (value, 1)
+            _SYNC_COUNTER += 1
+            current_sync = _SYNC_COUNTER
+
+        return (value, current_sync)
+
+    @classmethod
+    def IS_CHANGED(cls, key, value, respond_channel=1, selected_channel=1):
+        return time.time()
 
 
 # =========================
@@ -211,7 +233,7 @@ class GGBroGetAny:
             },
             "optional": {
                 "default": (ANY,),
-                "sync": ("INT", {"default": 1}),
+                "sync": ("INT", {"default": 0}),
             }
         }
 
@@ -220,16 +242,20 @@ class GGBroGetAny:
     FUNCTION = "get"
     CATEGORY = "GGBro Router"
 
-    def get(self, key, default=None, sync=1):
+    def get(self, key, default=None, sync=0):
         with _LOCK:
             v = _STORE.get(str(key), None)
 
         if v is None or _is_blocker(v):
             if default is not None:
                 return (default,)
-            return (_empty_image(),)
+            return (_off(f"GGBro Get: key '{key}' not found"),)
 
         return (v,)
+
+    @classmethod
+    def IS_CHANGED(cls, key, default=None, sync=0):
+        return (str(key), int(sync))
 
 
 NODE_CLASS_MAPPINGS = {
