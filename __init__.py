@@ -135,7 +135,7 @@ class GGBroRouterInAny:
                 "select": ("INT", {"default": 1, "min": 1, "max": cls.MAX_IN, "step": 1}),
             },
             "optional": {
-                **{f"in{i}": (ANY,) for i in range(1, cls.MAX_IN + 1)},
+                **{f"in{i}": (ANY, {"lazy": True}) for i in range(1, cls.MAX_IN + 1)},
             }
         }
 
@@ -144,19 +144,22 @@ class GGBroRouterInAny:
     FUNCTION = "route"
     CATEGORY = "GGBro Router"
 
-    def route(self, **kwargs):
-        sel = int(kwargs.get("select", 1))
-        sel = max(1, min(self.MAX_IN, sel))
+    def check_lazy_status(self, select, **kwargs):
+        key = f"in{int(select)}"
+        if kwargs.get(key, None) is None:
+            return [key]
+        return []
 
+    def route(self, select, **kwargs):
+        sel = max(1, min(self.MAX_IN, int(select)))
         key = f"in{sel}"
-        if key not in kwargs:
-            return (sel, _off(f"Router IN: selected input '{key}' is not connected"))
-
         value = kwargs.get(key, None)
+
         if value is None or _is_blocker(value):
             return (sel, _off(f"Router IN: selected input '{key}' is empty or blocked"))
 
         return (sel, value)
+
 
 
 # =========================
