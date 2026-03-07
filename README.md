@@ -4,6 +4,10 @@ A small ComfyUI node suite for clean channel-based routing.
 
 It is designed to help build modular workflows with explicit branching, while keeping everything visible in the graph.
 
+It is especially useful for rapidly switching between multiple model pipelines inside the same ComfyUI workflow.
+
+---
+
 ## Included Nodes
 
 ### 1) `GGBro Channel Selector`
@@ -16,8 +20,8 @@ A simple channel selector.
 - `selected_channel`
 
 **Use case**
-- Drive multiple routing nodes with the same selected channel.
-- Keep channel selection centralized and readable.
+- Drive multiple routing nodes with the same selected channel
+- Keep channel selection centralized and readable
 
 ---
 
@@ -35,12 +39,12 @@ It sends one input into the selected output channel.
 - `out1 ... out8`
 
 **Behavior**
-- Only `out[select]` receives the input value.
-- All other outputs return an `ExecutionBlocker` for hard gating.
+- Only `out[select]` receives the input value
+- All other outputs return an `ExecutionBlocker` for hard gating
 
 **Typical use**
-- Send one prompt, latent, image, or value into one branch only.
-- Cleanly activate one branch without passing data into all others.
+- Send one prompt, latent, image, or value into one branch only
+- Cleanly activate one branch without passing data into all others
 
 ---
 
@@ -58,12 +62,12 @@ It returns only the input corresponding to the selected channel.
 - `out`
 
 **Behavior**
-- Only the selected input is forwarded to `out`.
-- If the selected input is missing or blocked, the node returns an `ExecutionBlocker`.
+- Only the selected input is forwarded to `out`
+- If the selected input is missing or blocked, the node returns an `ExecutionBlocker`
 
 **Typical use**
-- Merge multiple alternative branches back into a single output.
-- Select one result from several model / image / latent branches.
+- Merge multiple alternative branches back into a single output
+- Select one result from several model / image / latent branches
 
 ---
 
@@ -134,4 +138,4 @@ Prompt/Image/Latent
    Router OUT
    select = 2
         |
-   out2 only
+      out2 only
