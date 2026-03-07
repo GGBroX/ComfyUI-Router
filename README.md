@@ -1,74 +1,137 @@
-# GGBro Router (Any) — Router + Global Set/Get for ComfyUI
+# GGBro Router for ComfyUI
 
-A small ComfyUI node suite designed to:
-- **route** one input into multiple branches (hard gating with blockers),
-- **store** a value into a global variable **by key** (no `A_0`, `A_1` when you copy nodes),
-- **retrieve** that global value anywhere,
-- and **auto-wire** a hidden “sync” connection so the active Set is always synchronized with the matching Get.
+A small ComfyUI node suite for clean channel-based routing.
 
-> Goal: modular “stage” workflows, clean branching, no blocker/merge hell, and no duplicated variables when copy/pasting Set nodes.
-
----
+It is designed to help build modular workflows with explicit branching, while keeping everything visible in the graph.
 
 ## Included Nodes
 
-### 1) `GGBro Router (Any)`
-**1 → N** router (demux).
+### 1) `GGBro Channel Selector`
+A simple channel selector.
 
-**Inputs**
-- `in` *(optional)*: any data
-- `select`: integer channel (1..N)
+**Input**
+- `select`: integer channel (`1..8`)
 
-**Outputs**
-- `selected_channel`: the current channel
-- `out1..outN`: only `out[select]` receives `in`, all others output an **ExecutionBlocker** (hard gating)
+**Output**
+- `selected_channel`
 
-**Notes**
-- If `in` is not connected, the Router can still be used as a “controller” (it outputs `selected_channel`), but the `out*` ports won’t carry meaningful payload.
+**Use case**
+- Drive multiple routing nodes with the same selected channel.
+- Keep channel selection centralized and readable.
 
 ---
 
-### 2) `GGBro Set (Any)`
-Global Set “no suffix” (unique by key).
+### 2) `GGBro Router OUT (Any)`
+A **1 → 8** router.
+
+It sends one input into the selected output channel.
+
+**Inputs**
+- `in` (optional): any data
+- `select`: integer channel (`1..8`)
+
+**Outputs**
+- `selected_channel`
+- `out1 ... out8`
+
+**Behavior**
+- Only `out[select]` receives the input value.
+- All other outputs return an `ExecutionBlocker` for hard gating.
+
+**Typical use**
+- Send one prompt, latent, image, or value into one branch only.
+- Cleanly activate one branch without passing data into all others.
+
+---
+
+### 3) `GGBro Router IN (Any)`
+An **8 → 1** router.
+
+It returns only the input corresponding to the selected channel.
+
+**Inputs**
+- `in1 ... in8` (optional)
+- `select`: integer channel (`1..8`)
+
+**Outputs**
+- `selected_channel`
+- `out`
+
+**Behavior**
+- Only the selected input is forwarded to `out`.
+- If the selected input is missing or blocked, the node returns an `ExecutionBlocker`.
+
+**Typical use**
+- Merge multiple alternative branches back into a single output.
+- Select one result from several model / image / latent branches.
+
+---
+
+### 4) `GGBro Set (Any)`
+Global Set node by key.
 
 **Inputs**
 - `key` (string)
 - `value` (any)
 - `respond_channel` (int)
-- `selected_channel` *(optional)*: usually connected from `Router.selected_channel`
+- `selected_channel` (optional)
 
 **Outputs**
-- `value` (pass-through)
-- `sync` (internal “virtual wire” helper)
+- `value`
+- `sync`
 
 **Behavior**
-- If `selected_channel != respond_channel` → **does not write**
-- If `value` is `None` or a blocker → **does not write**
-- Otherwise writes into a global store under `key`.
+- Writes only when `selected_channel == respond_channel`
+- Ignores `None` and blocked values
+- Stores the value globally under the given key
+
+**Typical use**
+- Lightweight keyed storage for modular workflows
+- Passing values across distant parts of a graph when explicit routing is inconvenient
+
+> Note: for core pipeline resources such as `MODEL`, `CLIP`, and `VAE`, explicit graph routing with `Router OUT` / `Router IN` is usually more robust than global Set/Get.
 
 ---
 
-### 3) `GGBro Get (Any)`
-Global Get “no suffix” (reads by key).
+### 5) `GGBro Get (Any)`
+Global Get node by key.
 
 **Inputs**
 - `key` (string)
-- `default` *(optional)*
-- `sync` *(optional / auto-wired)*
+- `default` (optional)
+- `sync` (optional)
 
-**Output**
+**Outputs**
 - `value`
 
 **Behavior**
-- If a valid value exists for `key`, returns it
-- If missing, returns `default` (if provided), otherwise returns a safe placeholder (e.g. a small black image) to avoid crashing Preview nodes.
+- Returns the stored value for `key`
+- If missing, returns `default` if provided
+- Otherwise returns a safe fallback placeholder
 
 ---
 
-## Installation
+## Routing Model
 
-### Option A — Git clone (recommended)
-Inside `ComfyUI/custom_nodes/`:
+The node suite is built around a simple idea:
 
-```bash
-git clone https://github.com/<YOUR_USER>/<YOUR_REPO>.git GGBro_Router
+- **Channel Selector** chooses the active channel
+- **Router OUT** sends data into one branch
+- **Router IN** collects data back from one branch
+
+This makes workflows easier to read than large blocker/merge constructions and keeps routing explicit inside the ComfyUI graph.
+
+---
+
+## Example
+
+### Branch out
+Use one input and route it into one of several branches:
+
+```text
+Prompt/Image/Latent
+        |
+   Router OUT
+   select = 2
+        |
+   out2 only
