@@ -32,14 +32,6 @@ def _is_blocker(x) -> bool:
         return False
 
 
-def _empty_image():
-    try:
-        import torch
-        return torch.zeros((1, 64, 64, 3), dtype=torch.float32)
-    except Exception:
-        return None
-
-
 def _get_execution_blocker():
     try:
         from comfy_execution.graph import ExecutionBlocker
@@ -68,7 +60,7 @@ def _off(message=None):
 
 
 # =========================
-# 1) GGBro Channel Selector
+# 0) GGBro Channel Selector
 # =========================
 class GGBroChannelSelector:
     MAX_CHANNELS = 8
@@ -91,9 +83,13 @@ class GGBroChannelSelector:
         sel = max(1, min(self.MAX_CHANNELS, sel))
         return (sel,)
 
+    @classmethod
+    def IS_CHANGED(cls, select=1):
+        return int(select)
+
 
 # =========================
-# 2) GGBro Router OUT (Any) 1->8
+# 1) GGBro Router OUT (Any) 1->8
 # =========================
 class GGBroRouterOutAny:
     MAX_OUT = 8
@@ -125,11 +121,11 @@ class GGBroRouterOutAny:
 
     @classmethod
     def IS_CHANGED(cls, select=1, **kwargs):
-        return time.time()
+        return int(select)
 
 
 # =========================
-# 3) GGBro Router IN (Any) 8->1
+# 2) GGBro Router IN (Any) 8->1
 # =========================
 class GGBroRouterInAny:
     MAX_IN = 8
@@ -168,11 +164,11 @@ class GGBroRouterInAny:
 
     @classmethod
     def IS_CHANGED(cls, select=1, **kwargs):
-        return time.time()
+        return int(select)
 
 
 # =========================
-# 4) GGBro Set (Any)
+# 3) GGBro Set (Any)
 # =========================
 class GGBroSetAny:
     OUTPUT_NODE = True
@@ -222,7 +218,7 @@ class GGBroSetAny:
 
 
 # =========================
-# 5) GGBro Get (Any)
+# 4) GGBro Get (Any)
 # =========================
 class GGBroGetAny:
     @classmethod
