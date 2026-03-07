@@ -1,16 +1,24 @@
 import threading
 
+
 # ===== Any type =====
 class AnyType(str):
-    def __ne__(self, other): return False
-    def __eq__(self, other): return True
+    def __ne__(self, other):
+        return False
+
+    def __eq__(self, other):
+        return True
+
 
 ANY = AnyType("*")
 
-# ===== Store globale =====
+
+# ===== Global store =====
 _STORE = {}
 _LOCK = threading.RLock()
 
+
+# ===== Helpers =====
 def _is_blocker(x) -> bool:
     if x is None:
         return False
@@ -21,13 +29,14 @@ def _is_blocker(x) -> bool:
     except Exception:
         return False
 
+
 def _empty_image():
-    # fallback safe per PreviewImage se non hai messo default
     try:
         import torch
         return torch.zeros((1, 64, 64, 3), dtype=torch.float32)
     except Exception:
         return None
+
 
 def _get_execution_blocker():
     try:
@@ -35,23 +44,56 @@ def _get_execution_blocker():
         return ExecutionBlocker
     except Exception:
         pass
+
     try:
         from execution import ExecutionBlocker
         return ExecutionBlocker
     except Exception:
         pass
+
     class ExecutionBlocker:
         def __init__(self, message=None):
             self.message = message
+
     return ExecutionBlocker
+
 
 ExecutionBlocker = _get_execution_blocker()
 
 
+def _off(message=None):
+    return ExecutionBlocker(message)
+
+
 # =========================
-# 1) GGBro Router (Any) 1->N
+# 1) GGBro Channel Selector
 # =========================
-class GGBroRouterAny:
+class GGBroChannelSelector:
+    MAX_CHANNELS = 8
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "select": ("INT", {"default": 1, "min": 1, "max": cls.MAX_CHANNELS, "step": 1}),
+            }
+        }
+
+    RETURN_TYPES = ("INT",)
+    RETURN_NAMES = ("selected_channel",)
+    FUNCTION = "select_channel"
+    CATEGORY = "GGBro Router"
+
+    def select_channel(self, select):
+        sel = int(select)
+        sel = max(1, min(self.MAX_CHANNELS, sel))
+        return (sel,)
+
+
+# =========================
+# 2) GGBro Router OUT (Any) 1->8
+# =========================
+class GGBroRouterOutAny:
     MAX_OUT = 8
 
     @classmethod
@@ -71,19 +113,54 @@ class GGBroRouterAny:
     CATEGORY = "GGBro Router"
 
     def route(self, **kwargs):
-        inp = kwargs.get("in", None)  # <- ora può non esserci
+        inp = kwargs.get("in", None)
         sel = int(kwargs.get("select", 1))
         sel = max(1, min(self.MAX_OUT, sel))
 
-        off = ExecutionBlocker(None)
-        outs = [off] * self.MAX_OUT
-        outs[sel - 1] = inp  # se inp è None, va bene (ma non usarlo per preprocessors)
-
+        outs = [_off()] * self.MAX_OUT
+        outs[sel - 1] = inp
         return (sel,) + tuple(outs)
 
 
 # =========================
-# 2) GGBro Set (Any)
+# 3) GGBro Router IN (Any) 8->1
+# =========================
+class GGBroRouterInAny:
+    MAX_IN = 8
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "select": ("INT", {"default": 1, "min": 1, "max": cls.MAX_IN, "step": 1}),
+            },
+            "optional": {
+                **{f"in{i}": (ANY,) for i in range(1, cls.MAX_IN + 1)},
+            }
+        }
+
+    RETURN_TYPES = ("INT", ANY)
+    RETURN_NAMES = ("selected_channel", "out")
+    FUNCTION = "route"
+    CATEGORY = "GGBro Router"
+
+    def route(self, **kwargs):
+        sel = int(kwargs.get("select", 1))
+        sel = max(1, min(self.MAX_IN, sel))
+
+        key = f"in{sel}"
+        if key not in kwargs:
+            return (sel, _off(f"Router IN: selected input '{key}' is not connected"))
+
+        value = kwargs.get(key, None)
+        if value is None or _is_blocker(value):
+            return (sel, _off(f"Router IN: selected input '{key}' is empty or blocked"))
+
+        return (sel, value)
+
+
+# =========================
+# 4) GGBro Set (Any)
 # =========================
 class GGBroSetAny:
     OUTPUT_NODE = True
@@ -108,22 +185,19 @@ class GGBroSetAny:
     CATEGORY = "GGBro Router"
 
     def set(self, key, value, respond_channel=1, selected_channel=1):
-        # se non è il canale giusto, non scrivere
         if int(selected_channel) != int(respond_channel):
             return (value, 1)
 
-        # ramo spento / blocker / None => non scrivere
         if value is None or _is_blocker(value):
             return (value, 1)
 
         with _LOCK:
             _STORE[str(key)] = value
-
         return (value, 1)
 
 
 # =========================
-# 3) GGBro Get (Any)
+# 5) GGBro Get (Any)
 # =========================
 class GGBroGetAny:
     @classmethod
@@ -134,7 +208,7 @@ class GGBroGetAny:
             },
             "optional": {
                 "default": (ANY,),
-                "sync": ("INT", {"default": 1}),  # virtual wire (autowire)
+                "sync": ("INT", {"default": 1}),
             }
         }
 
@@ -156,15 +230,23 @@ class GGBroGetAny:
 
 
 NODE_CLASS_MAPPINGS = {
-    "GGBro Router": GGBroRouterAny,
+    "GGBro Channel Selector": GGBroChannelSelector,
+    "GGBro Router OUT": GGBroRouterOutAny,
+    "GGBro Router IN": GGBroRouterInAny,
+    "GGBro Router": GGBroRouterOutAny,  # legacy alias
     "GGBro Set": GGBroSetAny,
     "GGBro Get": GGBroGetAny,
 }
 
+
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "GGBro Router": "GGBro Router (Any)",
+    "GGBro Channel Selector": "GGBro Channel Selector",
+    "GGBro Router OUT": "GGBro Router OUT (Any)",
+    "GGBro Router IN": "GGBro Router IN (Any)",
+    "GGBro Router": "GGBro Router OUT (Any) [Legacy]",
     "GGBro Set": "GGBro Set (Any)",
     "GGBro Get": "GGBro Get (Any)",
 }
+
 
 WEB_DIRECTORY = "./web"
